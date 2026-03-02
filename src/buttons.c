@@ -10,9 +10,7 @@ SDL_Texture* LoadSVG(SDL_Renderer* renderer, const char* file, int width, int he
         printf("Failed to open SVG file: %s\n", SDL_GetError());
         return NULL;
     } 
-
-    // SDL_image 3 can load SVGs directly into a texture
-    // If you need a specific size, IMG_LoadSizedSVG is your friend
+    
     SDL_Surface* surface = IMG_LoadSizedSVG_IO(io, width, height);
     if (!surface) {
         SDL_CloseIO(io);

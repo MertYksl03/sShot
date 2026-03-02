@@ -53,7 +53,7 @@ void func1(ButtonType type) {
 
 int main(void) {
     if (!initialize_window()) {
-        return 1; // Exit with error code if initialization fails
+        return 1; 
     }
     bool is_running = true;
     SDL_Event event;    
@@ -79,11 +79,6 @@ int main(void) {
         is_running = process_input(&event, buttons);
         update();
         render();
-    }
-
-    // print buttons for the last time for debugging
-    for (int i = 0; i < sizeof(buttons)/sizeof(buttons[0]); i++) {
-        printf("Button %d: {%f, %f, %f, %f}\n", i, buttons[i]->rect.x, buttons[i]->rect.y, buttons[i]->rect.w, buttons[i]->rect.h);
     }
     QUIT();
     
@@ -164,11 +159,6 @@ void render() {
     SDL_RenderClear(renderer);
 
     if (is_drawing_selection_rect || is_dragging_selection_rect || (current_rect.w != 0 && current_rect.h != 0)) {
-        // Draw the fill (Semi-transparent Blue)
-        // SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        // SDL_SetRenderDrawColor(renderer, 0, 120, 255, 100);
-        // SDL_RenderFillRect(renderer, &current_rect);
-
         // Draw the outline (Bright Blue)
         SDL_SetRenderDrawColor(renderer, 0, 200, 255, 255);
         SDL_RenderRect(renderer, &current_rect);
