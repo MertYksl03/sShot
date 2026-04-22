@@ -2,6 +2,7 @@
 #include "buttons.h"
 #include "colors.h"
 #include "mouse.h"
+#include "undo.h"
 
 #define DEV_MODE 1 // Set to 1 to enable dev mode features (e.g., using local asset/config paths)
 
@@ -32,6 +33,11 @@ Button *copy_button;
 Button *fullscreen_button;
 int fscreen_button_spacing = 20; // Spacing between buttons
 
+SDL_Texture *image_tex = NULL;
+SDL_FRect image_rect = {0, 0, 0, 0}; // To store the position and size of the loaded image
+float image_tex_width, image_tex_height; 
+float zoom_sens = 0.10; // Sensitivity for zooming in/out the image
+
 
 bool is_drawing_selection_rect = false;
 bool is_dragging_selection_rect = false;
@@ -46,6 +52,9 @@ void render();
 bool load_assets();
 void func1(ButtonType type); // Placeholder for button click functions
 void handle_window_resize();
+void zoomin_image();
+void zoomout_image();
+void cut_image();
 
 // Global functions (ALL CAPS)
 int APP_INIT(){
@@ -57,6 +66,17 @@ int APP_INIT(){
     SDL_SyncWindow(window);  // Wait for Wayland compositor to configure the window
     // get window size
     SDL_GetWindowSizeInPixels(window, &window_width, &window_height);
+
+    SDL_Surface* image_surface = IMG_Load(ASSET_PATH "test_image.png");
+    image_tex = SDL_CreateTextureFromSurface(renderer, image_surface);
+
+    image_rect.w = image_surface->w; // Set initial width of the image
+    image_rect.h = image_surface->h; // Set initial height of the image
+
+    SDL_GetTextureSize(image_tex, &image_tex_width, &image_tex_height);
+
+    SDL_DestroySurface(image_surface);
+    
     return APP_SUCCESS;
 }
 
@@ -92,6 +112,15 @@ void APP_QUIT() {
     destroy_button(save_button);
     destroy_button(copy_button);
     destroy_button(fullscreen_button);
+
+    // Free loaded image
+    if (image_tex) {
+        SDL_DestroyTexture(image_tex);
+        image_tex = NULL;
+    }
+
+    // Free undo stack
+    free_undo_stack();
     
     // Destroy renderer, window and quit
     SDL_DestroyRenderer(renderer);
@@ -154,9 +183,17 @@ bool process_input(SDL_Event *event, Button *buttons[]) {
                 case SDL_EVENT_KEY_UP:
                     break;
                 case SDL_EVENT_KEY_DOWN:
-                    if (event->key.key == SDLK_ESCAPE || event->key.key == SDLK_Q) {
+                    SDL_Keymod mod = event->key.mod;
+                    SDL_Keycode key = event->key.key;
+
+                    bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
+                    if (key == SDLK_ESCAPE || key == SDLK_Q) {
                         return false;
-                    }   
+                    }
+                    if (ctrl && key == SDLK_Z) {
+                        printf("Undo!\n");
+                        undo(renderer, &image_tex, &image_rect, &image_tex_width, &image_tex_height);
+                    }
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event->button.button == SDL_BUTTON_LEFT) {
                     mouse_left_button_down(event, &is_drawing_selection_rect, &is_dragging_selection_rect, &start_x, &start_y, &current_rect, buttons);
@@ -174,25 +211,52 @@ bool process_input(SDL_Event *event, Button *buttons[]) {
                 if (event->button.button == SDL_BUTTON_LEFT) {
                     mouse_left_button_up(event, &is_drawing_selection_rect, &is_dragging_selection_rect, &start_x, &start_y, &current_rect, &save_button->rect, &copy_button->rect);
                 }
+                if (event->button.button == SDL_BUTTON_RIGHT) {
+                    // for now
+                    cut_image();
+                }
                 break;
             
             case SDL_EVENT_WINDOW_RESIZED:
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                 window_width = event->window.data1;
                 window_height = event->window.data2;
-                handle_window_resize();
-                break;
-            }
 
+                // Update fullscreen button position
+                fullscreen_button->rect.x = window_width - DEFAULT_BUTTON_SIZE - fscreen_button_spacing;
+                fullscreen_button->rect.y = fscreen_button_spacing;
+
+                // Re-center the image
+                image_rect.x = (window_width - image_rect.w) / 2; // Center the image
+                image_rect.y = (window_height - image_rect.h) / 2;
+                
+                break;
+                
+            case SDL_EVENT_MOUSE_WHEEL:
+                if (event->wheel.y > 0) {
+                    // Zoom in
+                    image_rect.w = image_rect.w * zoom_sens + image_rect.w; // Increase width by a percentage
+                    image_rect.h = image_rect.h * zoom_sens + image_rect.h; // Increase height by a percentage
+
+                    zoom_sens += 0.02; // Increase zoom sensitivity for faster zooming when scrolling multiple times
+                } else if (event->wheel.y < 0) {
+                    // Zoom out, but prevent the image from becoming too small
+                    if (image_rect.w > zoom_sens && image_rect.h > zoom_sens) {
+                        image_rect.w = image_rect.w - image_rect.w * zoom_sens; // Decrease width by a percentage
+                        image_rect.h = image_rect.h - image_rect.h * zoom_sens; // Decrease height by a percentage
+
+                        zoom_sens = (zoom_sens > 0.10) ? zoom_sens - 0.02 : 0.10; // Decrease zoom sensitivity, but not below a certain threshold
+                    }
+                }
+                // Re-center the image after zooming
+                image_rect.x = (window_width - image_rect.w) / 2; // Center the image
+                image_rect.y = (window_height - image_rect.h) / 2;
+                break;
+            
+            }
         }
 
     return true;
-}
-
-void handle_window_resize() {
-    // Update fullscreen button position
-    fullscreen_button->rect.x = window_width - DEFAULT_BUTTON_SIZE - fscreen_button_spacing;
-    fullscreen_button->rect.y = fscreen_button_spacing;
 }
 
 void update() {
@@ -202,9 +266,13 @@ void update() {
 void render() {
     SDL_SetRenderDrawColorStruct(renderer, BACKGROUND_COLOR);
     SDL_RenderClear(renderer);
+    
+    if (image_tex) {
+        SDL_RenderTexture(renderer, image_tex, NULL, &image_rect);
+    }
 
     if (is_drawing_selection_rect || is_dragging_selection_rect || (current_rect.w != 0 && current_rect.h != 0)) {
-        // Draw the outline (Bright Blue)
+        // Draw the outline
         SDL_SetRenderDrawColorStruct(renderer, COLOR_SEMI_TRANSPARENT_BLUE);
         SDL_RenderRect(renderer, &current_rect);
 
@@ -222,6 +290,78 @@ void render() {
     // Present the rendered frame to the screen
     SDL_RenderPresent(renderer);
     return;
+}
+
+void cut_image() {
+    if (current_rect.w <= 0 || current_rect.h <= 0) return;
+
+    // If the current_rect is partially outside the image_rect, we need to adjust it and also calculate the corresponding source rect for cropping
+    if (current_rect.x < image_rect.x) {
+        current_rect.w -= (image_rect.x - current_rect.x);
+        current_rect.x = image_rect.x;
+    }
+
+    if (current_rect.y < image_rect.y) {
+        current_rect.h -= (image_rect.y - current_rect.y);
+        current_rect.y = image_rect.y;
+    }
+
+    if (current_rect.x + current_rect.w > image_rect.x + image_rect.w) {
+        current_rect.w = (image_rect.x + image_rect.w) - current_rect.x;
+    }
+
+    if (current_rect.y + current_rect.h > image_rect.y + image_rect.h) {
+        current_rect.h = (image_rect.y + image_rect.h) - current_rect.y;
+    }
+
+    // Convert current_rect from screen coords to texture coords
+    float scale_x = image_tex_width / image_rect.w;
+    float scale_y = image_tex_height / image_rect.h;
+
+    SDL_FRect src = {
+        (current_rect.x - image_rect.x) * scale_x,
+        (current_rect.y - image_rect.y) * scale_y,
+        current_rect.w * scale_x,
+        current_rect.h * scale_y
+    };
+
+    SDL_Texture* cropped_tex = SDL_CreateTexture(
+        renderer,
+        SDL_PIXELFORMAT_RGBA8888,
+        SDL_TEXTUREACCESS_TARGET,
+        (int)src.w,
+        (int)src.h
+    );
+
+    if (!cropped_tex) {
+        printf("Failed to create cropped texture: %s\n", SDL_GetError());
+        return;
+    }
+
+    SDL_Texture* prev_target = SDL_GetRenderTarget(renderer);
+
+    SDL_SetRenderTarget(renderer, cropped_tex);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_FRect dst = { 0, 0, src.w, src.h };
+    SDL_RenderTexture(renderer, image_tex, &src, &dst);  // <-- src, not current_rect
+
+    SDL_SetRenderTarget(renderer, prev_target);
+
+    push_undo_state(renderer, image_tex, image_rect, image_tex_width, image_tex_height);
+    SDL_DestroyTexture(image_tex);
+    image_tex = cropped_tex;
+
+    image_tex_width = src.w;
+    image_tex_height = src.h;
+
+    image_rect.w = current_rect.w;
+    image_rect.h = current_rect.h;
+    image_rect.x = (window_width - image_rect.w) / 2;
+    image_rect.y = (window_height - image_rect.h) / 2;
+
+    current_rect = (SDL_FRect){ 0, 0, 0, 0 };
 }
 
 // load and create textures, initialize variables, etc.
