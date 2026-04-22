@@ -36,7 +36,7 @@ int fscreen_button_spacing = 20; // Spacing between buttons
 SDL_Texture *image_tex = NULL;
 SDL_FRect image_rect = {0, 0, 0, 0}; // To store the position and size of the loaded image
 float image_tex_width, image_tex_height; 
-float zoom_sens = 0.10; // Sensitivity for zooming in/out the image
+float zoom_sens = 0.05; // Sensitivity for zooming in/out the image
 
 
 bool is_drawing_selection_rect = false;
@@ -57,7 +57,7 @@ void zoomout_image();
 void cut_image();
 
 // Global functions (ALL CAPS)
-int APP_INIT(){
+int APP_INIT(void){
     if (!initialize_window()) {
         return APP_ERROR_INIT; 
     }
@@ -67,15 +67,17 @@ int APP_INIT(){
     // get window size
     SDL_GetWindowSizeInPixels(window, &window_width, &window_height);
 
-    SDL_Surface* image_surface = IMG_Load(ASSET_PATH "test_image.png");
+    SDL_Surface* image_surface = IMG_Load("/run/user/1000/hypr/xdph_screenshot_2919ba1b.png");
+
     image_tex = SDL_CreateTextureFromSurface(renderer, image_surface);
 
     image_rect.w = image_surface->w; // Set initial width of the image
     image_rect.h = image_surface->h; // Set initial height of the image
 
     SDL_GetTextureSize(image_tex, &image_tex_width, &image_tex_height);
-
+    
     SDL_DestroySurface(image_surface);
+    SDL_SetTextureScaleMode(image_tex, SDL_SCALEMODE_LINEAR);
     
     return APP_SUCCESS;
 }
@@ -153,8 +155,7 @@ bool initialize_window() {
            return false;
     }
     
-    if (SDL_CreateWindowAndRenderer(TITLE, 0, 0, SDL_WINDOW_FULLSCREEN, &window, &renderer) != true) {
-        fprintf(stderr, "Error creating window and renderer: %s\n", SDL_GetError());
+    if (SDL_CreateWindowAndRenderer(TITLE, 1920, 1080, SDL_WINDOW_FULLSCREEN, &window, &renderer) != true) {
         return false;
     }
 
@@ -187,13 +188,17 @@ bool process_input(SDL_Event *event, Button *buttons[]) {
                     SDL_Keycode key = event->key.key;
 
                     bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
+
                     if (key == SDLK_ESCAPE || key == SDLK_Q) {
                         return false;
                     }
                     if (ctrl && key == SDLK_Z) {
-                        printf("Undo!\n");
                         undo(renderer, &image_tex, &image_rect, &image_tex_width, &image_tex_height);
                     }
+                    if (ctrl && key == SDLK_C){
+                        //TODO: Implement copy functionality
+                    }
+
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event->button.button == SDL_BUTTON_LEFT) {
                     mouse_left_button_down(event, &is_drawing_selection_rect, &is_dragging_selection_rect, &start_x, &start_y, &current_rect, buttons);
@@ -229,23 +234,23 @@ bool process_input(SDL_Event *event, Button *buttons[]) {
                 // Re-center the image
                 image_rect.x = (window_width - image_rect.w) / 2; // Center the image
                 image_rect.y = (window_height - image_rect.h) / 2;
-                
+
                 break;
                 
             case SDL_EVENT_MOUSE_WHEEL:
                 if (event->wheel.y > 0) {
                     // Zoom in
                     image_rect.w = image_rect.w * zoom_sens + image_rect.w; // Increase width by a percentage
-                    image_rect.h = image_rect.h * zoom_sens + image_rect.h; // Increase height by a percentage
+                    image_rect.h = image_rect.h * zoom_sens + image_rect.h;
 
-                    zoom_sens += 0.02; // Increase zoom sensitivity for faster zooming when scrolling multiple times
+                    zoom_sens = (zoom_sens < 0.30) ? zoom_sens + 0.02 : 0.30;
                 } else if (event->wheel.y < 0) {
                     // Zoom out, but prevent the image from becoming too small
                     if (image_rect.w > zoom_sens && image_rect.h > zoom_sens) {
                         image_rect.w = image_rect.w - image_rect.w * zoom_sens; // Decrease width by a percentage
-                        image_rect.h = image_rect.h - image_rect.h * zoom_sens; // Decrease height by a percentage
+                        image_rect.h = image_rect.h - image_rect.h * zoom_sens; 
 
-                        zoom_sens = (zoom_sens > 0.10) ? zoom_sens - 0.02 : 0.10; // Decrease zoom sensitivity, but not below a certain threshold
+                        zoom_sens = (zoom_sens > 0.10) ? zoom_sens - 0.02 : 0.10;
                     }
                 }
                 // Re-center the image after zooming
