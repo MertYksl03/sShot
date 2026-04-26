@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 typedef struct UndoState {
+    SDL_Surface *image_surface;
     SDL_Texture *image_tex;
     SDL_FRect image_rect;
     float image_tex_width;
@@ -20,6 +21,14 @@ typedef struct UndoNode {
     UndoState *state;
     struct UndoNode *next;
 } UndoNode;
+
+SDL_Surface* copy_surface(SDL_Surface* src) {
+    SDL_Surface* copy = SDL_CreateSurface(src->w, src->h, src->format);
+    if (!copy) return NULL;
+
+    SDL_BlitSurface(src, NULL, copy, NULL);
+    return copy;
+}
 
 SDL_Texture* copy_texture(SDL_Renderer* renderer,SDL_Texture* src, float w, float h) {
     SDL_Texture* copy = SDL_CreateTexture(
@@ -57,7 +66,7 @@ UndoNode *push(UndoNode *stack, UndoState *state) {
     return stack;
 }
 
-void push_undo_state(SDL_Renderer* renderer, SDL_Texture *image_tex, SDL_FRect image_rect, float image_tex_width, float image_tex_height) {
+void push_undo_state(SDL_Renderer* renderer, SDL_Surface *original_surface, SDL_Texture *image_tex, SDL_FRect image_rect, float image_tex_width, float image_tex_height) {
     // Create a new undo state and push it onto the stack
     UndoState *state = malloc(sizeof(UndoState));
     if (!state) {
@@ -65,6 +74,7 @@ void push_undo_state(SDL_Renderer* renderer, SDL_Texture *image_tex, SDL_FRect i
     }
 
     // Copy current image texture and related info into the undo state
+    state->image_surface = copy_surface(original_surface);
     state->image_tex = copy_texture(renderer, image_tex, image_tex_width, image_tex_height);
     state->image_rect = image_rect;
     state->image_tex_width = image_tex_width;
@@ -72,7 +82,7 @@ void push_undo_state(SDL_Renderer* renderer, SDL_Texture *image_tex, SDL_FRect i
     undo_stack = push(undo_stack, state);
 }
 
-void undo(SDL_Renderer* renderer, SDL_Texture **image_tex, SDL_FRect *image_rect, float *image_tex_width, float *image_tex_height) {
+void undo(SDL_Renderer* renderer, SDL_Surface **original_surface, SDL_Texture **image_tex, SDL_FRect *image_rect, float *image_tex_width, float *image_tex_height) {
     if (!undo_stack) {
         return;
     }
@@ -82,6 +92,7 @@ void undo(SDL_Renderer* renderer, SDL_Texture **image_tex, SDL_FRect *image_rect
     UndoState *state = top->state;
 
     // Restore the image texture and related info
+    *original_surface = copy_surface(state->image_surface);
     *image_tex = copy_texture(renderer, state->image_tex, state->image_tex_width, state->image_tex_height);
     *image_rect = state->image_rect;
     *image_tex_width = state->image_tex_width;
@@ -97,6 +108,8 @@ void free_undo_stack() {
     while (undo_stack) {
         UndoNode *temp = undo_stack;
         undo_stack = undo_stack->next;
+        SDL_DestroySurface(temp->state->image_surface);
+        SDL_DestroyTexture(temp->state->image_tex);
         free(temp->state);
         free(temp);
     }
