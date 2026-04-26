@@ -12,6 +12,8 @@ The header file for all the global variables and functions
 
 // helper macro to set draw color using SDL_Color struct
 #define SDL_SetRenderDrawColorStruct(renderer, color) SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+#define compare_frects(a, b) \
+    (((a).x == (b).x) && ((a).y == (b).y) && ((a).w == (b).w) && ((a).h == (b).h))
 
 // Program succes enum 
 enum {
@@ -24,9 +26,6 @@ enum {
 };
 
 
-bool compare_frects(SDL_FRect a, SDL_FRect b) {
-    return (a.x == b.x) && (a.y == b.y) && (a.w == b.w) && (a.h == b.h);
-}
 
 // Function prototypes
 int APP_INIT();
