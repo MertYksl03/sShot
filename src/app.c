@@ -3,6 +3,7 @@
 #include "colors.h"
 #include "mouse.h"
 #include "undo.h"
+#include "wayland/take_ss.h"
 
 #define DEV_MODE 1 // Set to 1 to enable dev mode features (e.g., using local asset/config paths)
 
@@ -51,6 +52,7 @@ void update();
 void render();
 bool load_assets();
 void func1(ButtonType type); // Placeholder for button click functions
+void on_fullscreen_button_click(ButtonType type);
 void handle_window_resize();
 void zoomin_image();
 void zoomout_image();
@@ -58,6 +60,8 @@ void cut_image();
 
 // Global functions (ALL CAPS)
 int APP_INIT(void){
+    // Take screenshot first
+    char *ss_filepath = take_ss_wayland();
     if (!initialize_window()) {
         return APP_ERROR_INIT; 
     }
@@ -67,12 +71,23 @@ int APP_INIT(void){
     // get window size
     SDL_GetWindowSizeInPixels(window, &window_width, &window_height);
 
-    SDL_Surface* image_surface = IMG_Load("/run/user/1000/hypr/xdph_screenshot_2919ba1b.png");
+    SDL_Surface* image_surface = IMG_Load(ss_filepath);
+
+    if (image_surface == NULL) {
+        fprintf(stderr, "Error loading image: %s\n", SDL_GetError());
+        return APP_ERROR_INIT;
+    }
 
     image_tex = SDL_CreateTextureFromSurface(renderer, image_surface);
 
-    image_rect.w = image_surface->w; // Set initial width of the image
-    image_rect.h = image_surface->h; // Set initial height of the image
+    if (image_tex == NULL) {
+        fprintf(stderr, "Error creating texture from surface: %s\n", SDL_GetError());
+        SDL_DestroySurface(image_surface);
+        return APP_ERROR_INIT;
+    }
+
+    image_rect.w = (float)image_surface->w; // Set initial width of the image
+    image_rect.h = (float)image_surface->h; // Set initial height of the image
 
     SDL_GetTextureSize(image_tex, &image_tex_width, &image_tex_height);
     
@@ -80,6 +95,8 @@ int APP_INIT(void){
     SDL_SetTextureScaleMode(image_tex, SDL_SCALEMODE_LINEAR);
     
     return APP_SUCCESS;
+
+    
 }
 
 int APP_RUN(void) {
@@ -92,7 +109,7 @@ int APP_RUN(void) {
     // Bind buttons to functions
     bind_button_to_function(save_button, func1);
     bind_button_to_function(copy_button, func1);
-    bind_button_to_function(fullscreen_button, func1);
+    bind_button_to_function(fullscreen_button, on_fullscreen_button_click);
 
     // Top right corner for fullscreen button
     fullscreen_button->rect.x = window_width - DEFAULT_BUTTON_SIZE - fscreen_button_spacing;
@@ -140,13 +157,18 @@ void func1(ButtonType type) {
     case COPY:
         printf("Copy button clicked!\n");
         break;
-    case FULLSCREEN:
-        printf("Fullscreen button clicked!\n");
-        break;
+    // case FULLSCREEN:
+    //     printf("Fullscreen button clicked!\n");
+    //     break;
     default:
         printf("Button of type %d clicked!\n", type);
         break;
     }
+}
+
+void on_fullscreen_button_click(ButtonType type) {
+    // Make the current rect as the same as the image rect
+    current_rect = image_rect; 
 }
 
 bool initialize_window() {
@@ -272,22 +294,37 @@ void render() {
     SDL_SetRenderDrawColorStruct(renderer, BACKGROUND_COLOR);
     SDL_RenderClear(renderer);
     
+    // Render the loaded image
     if (image_tex) {
         SDL_RenderTexture(renderer, image_tex, NULL, &image_rect);
     }
 
+    // Draw selection rectangle
     if (is_drawing_selection_rect || is_dragging_selection_rect || (current_rect.w != 0 && current_rect.h != 0)) {
         // Draw the outline
         SDL_SetRenderDrawColorStruct(renderer, COLOR_SEMI_TRANSPARENT_BLUE);
         SDL_RenderRect(renderer, &current_rect);
-
-        if (!is_drawing_selection_rect && !is_dragging_selection_rect) {
-            // Draw the buttons only when not drawing
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            render_button(renderer, save_button);
-            render_button(renderer, copy_button);
-        }
     }
+
+    // Calculate button positions based on current_rect
+    if (current_rect.w != 0 && current_rect.h != 0) {
+        // Position the buttons near the selection rectangle
+        copy_button->rect.x = current_rect.x + current_rect.w - copy_button->rect.w; 
+        copy_button->rect.y = current_rect.y + current_rect.h + 5; // 5 pixels below the rectangle
+        save_button->rect.x = current_rect.x + current_rect.w - save_button->rect.w - copy_button->rect.w - 5; // 5 pixels to the left of the copy button
+        save_button->rect.y = current_rect.y + current_rect.h + 5; // 5 pixels below the rectangle
+    } else {
+        // If there is no selection rectangle yet, position the buttons at the bottom right corner
+        copy_button->rect.x = window_width - copy_button->rect.w;
+        copy_button->rect.y = window_height - copy_button->rect.h - 5;
+        save_button->rect.x = window_width - save_button->rect.w - copy_button->rect.w - 5;
+        save_button->rect.y = window_height - save_button->rect.h - 5;
+
+    }
+    // Draw buttons
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    render_button(renderer, save_button);
+    render_button(renderer, copy_button);
 
     //Render fullscreen button always
     render_button(renderer, fullscreen_button);
@@ -366,7 +403,8 @@ void cut_image() {
     image_rect.x = (window_width - image_rect.w) / 2;
     image_rect.y = (window_height - image_rect.h) / 2;
 
-    current_rect = (SDL_FRect){ 0, 0, 0, 0 };
+    // current_rect = (SDL_FRect){ 0, 0, 0, 0 };
+    current_rect = image_rect; // Set current_rect to the new image_rect after cutting
 }
 
 // load and create textures, initialize variables, etc.
