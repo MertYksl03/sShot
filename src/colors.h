@@ -18,7 +18,6 @@ const SDL_Color COLOR_LIGHT_BLACK = {30, 30, 30, 255};
 const SDL_Color COLOR_SEMI_TRANSPARENT_BLUE = {0, 200, 255, 120};
 
 const SDL_Color COLOR_BUTTON_HOVER = COLOR_SEMI_TRANSPARENT_BLUE; // White for default button color
-const SDL_Color BUTTON_HOVER_COLOR = {0, 200, 255, 120}; // Light blue with some transparency for hover effect
 const SDL_Color BACKGROUND_COLOR = COLOR_LIGHT_BLACK; // Light gray for background
 
 
