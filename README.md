@@ -62,6 +62,7 @@ To take a screenshot, simply run the `sshot` command in your terminal or from th
 |<kbd>Ctrl</kbd> + <kbd>S</kbd>|Save screenshot|
 |<kbd>Ctrl</kbd> + <kbd>C</kbd>|Copy screenshot to clipboard|
 |<kbd>Ctrl</kbd> + <kbd>Z</kbd>|Undo last action|
+|<kbd>Mouse Wheel</kbd> |Zoom in and out|
 |<kbd>Esc</kbd> or <kbd>Q</kbd>|Exit the application|
 
 ## Uninstallation
