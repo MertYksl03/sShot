@@ -7,19 +7,11 @@
 #include "wayland/take_ss_w.h"
 #include "X11/take_ss_x.h"
 
-#include "third-parties/tinyfiledialogs.h"
-
 #define DEV_MODE 1 // Set to 1 to enable dev mode features (e.g., using local asset/config paths)
 
-#if DEV_MODE
-    #define ASSET_PATH "src/assets/"
-    #define CONFIG_PATH "src/config/"
-#else 
-    #define ASSET_PATH "usr/local/share/sshot"
-    #define CONFIG_PATH "~/.config/sshot" 
-#endif
+#define ASSET_PATH "/usr/share/sshot/"
 
-#define TITLE "SSHot" // Window title(may be changed later)
+#define TITLE "sShot" // Window title(may be changed later)
 #define DEFAULT_WINDOW_WIDTH 800
 #define DEFAULT_WINDOW_HEIGHT 600
 #define DEFAULT_BUTTON_SIZE 20
@@ -55,6 +47,8 @@ float start_x, start_y;
 
 Button *all_buttons[BUTTON_COUNT];
 
+char *icon_path = ASSET_PATH "icon.png"; // This is for the notification icon
+
 // Local function prototypes
 bool initialize_window();
 void process_input(SDL_Event *event, Button *buttons[]);
@@ -75,6 +69,19 @@ int get_session() {
     return getenv("WAYLAND_DISPLAY") != NULL ? WAYLAND : X11;
 }
 
+void send_notification(const char *title, const char *message) {
+    // Create the notification: (Title, Body, Icon)
+    NotifyNotification *n = notify_notification_new(title, 
+                                                    message, 
+                                                    icon_path);
+
+    // Show it
+    notify_notification_show(n, NULL);
+
+    // Clean up
+    g_object_unref(G_OBJECT(n));
+}
+
 
 // Global functions (ALL CAPS)
 int APP_INIT(void){
@@ -89,13 +96,14 @@ int APP_INIT(void){
     }
 
     if (original_surface == NULL) {
-        fprintf(stderr, "Error loading image: %s\n", SDL_GetError());
+        send_notification("sShot Error", "Failed to take screenshot. Please try again.");
         return APP_ERROR_INIT;
     }
 
     // Initialize SDL, create window and renderer
     if (!initialize_window()) {
-        return APP_ERROR_INIT; 
+        send_notification("sShot Error", "Failed to initialize window.");
+        return APP_ERROR_INIT;
     }
 
     SDL_PumpEvents();
@@ -108,6 +116,7 @@ int APP_INIT(void){
     if (display_texture == NULL) {
         fprintf(stderr, "Error creating texture from surface: %s\n", SDL_GetError());
         SDL_DestroySurface(original_surface);
+        send_notification("sShot Error", "Failed to take screenshot. Please try again.");
         return APP_ERROR_INIT;
     }
 
@@ -136,6 +145,9 @@ int APP_INIT(void){
         all_buttons[i] = (i == 0) ? save_button : (i == 1) ? copy_button : fullscreen_button;
     }
 
+    // init notification system
+    notify_init(TITLE);
+
     // Everything is initialized successfully
     is_running = true;
 
@@ -155,6 +167,9 @@ int APP_RUN(void) {
 }
 
 void APP_QUIT() { 
+    // Cleanup notification system
+    notify_uninit();
+
     // Destroy buttons
     destroy_button(save_button);
     destroy_button(copy_button);
@@ -183,25 +198,48 @@ void on_fullscreen_button_click() {
     selection_rect = image_rect; 
 }
 
-const char* get_save_path_from_user() {
-    const char *filterPatterns[4] = { "*.png", "*.jpg", "*.bmp" , "*.jpeg"};
+typedef struct {
+    char *result;   // heap-allocated copy of chosen path, or NULL on cancel/error
+    bool done;
+} SaveDialogResult;
 
-    // get the time as the name of the file
+static void save_dialog_callback(void *userdata, const char * const *filelist, int filter) {
+    SaveDialogResult *res = (SaveDialogResult *)userdata;
+    if (filelist && filelist[0]) {
+        res->result = SDL_strdup(filelist[0]);
+    } else {
+        res->result = NULL;
+    }
+    res->done = true;
+}
+
+char *get_save_path_from_user(void) {
+    // Build default filename
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     char defaultFilename[128];
-    strftime(defaultFilename, sizeof(defaultFilename), "~/Pictures/Screenshots/screenshot_%Y-%m-%d_%H-%M-%S.png", t);
+    strftime(defaultFilename, sizeof(defaultFilename),
+             "screenshot_%Y-%m-%d_%H-%M-%S.png", t);
 
+    SaveDialogResult res = { NULL, false };
 
-    const char *save_path = tinyfd_saveFileDialog(
-        "Save Image",           // title
-        defaultFilename,        // default filename (can include a path)
-        4,                      // number of filters
-        filterPatterns,         // filter array
-        "Image Files"           // filter description (or NULL)
+    SDL_ShowSaveFileDialog(
+        save_dialog_callback,       // callback
+        &res,                       // userdata
+        NULL,                       // parent window (NULL = no parent)
+        NULL,                       // filter array
+        0,                          // number of filters
+        defaultFilename             // default filename
     );
 
-    return save_path; // Cast to non-const for easier handling, but be careful with this in real code
+    // Pump events until the dialog signals completion
+    SDL_Event event;
+    while (!res.done) {
+        SDL_WaitEvent(&event);      // blocks until any event arrives
+        SDL_PumpEvents();
+    }
+
+    return res.result;
 }
 
 bool save_image(SDL_Surface *surface, const char *path) {
@@ -209,7 +247,6 @@ bool save_image(SDL_Surface *surface, const char *path) {
         fprintf(stderr, "Error saving image: %s\n", SDL_GetError());
         return false;
     } else {
-        printf("Image saved successfully to %s\n", path);
         return true;
     }
 }
@@ -226,8 +263,10 @@ void on_save_button_click() {
     if (save_image(original_surface, save_path) != true) {
         fprintf(stderr, "Error saving image: %s\n", SDL_GetError());
         SDL_DestroySurface(original_surface); // There is something wrong with this. 
+        send_notification("sShot Error", "Failed to save screenshot.");
     } else {
         printf("Image saved successfully to %s\n", save_path);
+        send_notification("sShot", "Screenshot saved successfully!");
         is_running = false;
     }
 }
@@ -243,15 +282,15 @@ void copy_image_to_clipboard() {
     
     if (save_image(original_surface, ss_clipboard_filepath) != true) {
         fprintf(stderr, "Error saving image for clipboard: %s\n", SDL_GetError());
+        send_notification("sShot Error", "Failed to copy screenshot to clipboard.");
         return;
-    } else {
-        printf("Image saved successfully to %s for clipboard copying\n", ss_clipboard_filepath);
     }
     
     if (current_session == WAYLAND) {
         // Use wl-copy to copy the image to clipboard
         if (system("cat /tmp/sshot_clipboard.png | wl-copy --type image/png") != 0) {
             fprintf(stderr, "Error copying image to clipboard with wl-copy\n");
+            send_notification("sShot Error", "Failed to copy screenshot to clipboard.");
         } else {
             printf("Image copied to clipboard successfully using wl-copy\n");
         }
@@ -259,11 +298,13 @@ void copy_image_to_clipboard() {
         // Use xclip to copy the image to clipboard
         if (system("xclip -selection clipboard -t image/png -i /tmp/sshot_clipboard.png") != 0) {
             fprintf(stderr, "Error copying image to clipboard with xclip\n");
+            send_notification("sShot Error", "Failed to copy screenshot to clipboard.");
         } else {
             printf("Image copied to clipboard successfully using xclip\n");
         }
     }
     
+    send_notification("sShot", "Screenshot copied to clipboard successfully!");
     is_running = false; // Exit the application after copying to clipboard
 }
 
@@ -486,11 +527,5 @@ void crop_image() {
     image_rect.y = (window_height - image_rect.h) / 2;
 
     selection_rect = image_rect; // Set selection_rect to the new image_rect after cutting
-}
-
-// load and create textures, initialize variables, etc.
-bool load_assets() {
-    // TODO
-    return true;
 }
 

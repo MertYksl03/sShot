@@ -11,6 +11,8 @@ The header file for all the global variables and functions
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
+#include <libnotify/notify.h>
+
 // helper macro to set draw color using SDL_Color struct
 #define SDL_SetRenderDrawColorStruct(renderer, color) SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 #define compare_frects(a, b) \
