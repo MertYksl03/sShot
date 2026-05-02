@@ -363,6 +363,10 @@ void process_input(SDL_Event *event, Button *buttons[]) {
                     if (ctrl && key == SDLK_C){
                         copy_image_to_clipboard();
                     }
+                    if (ctrl && key == SDLK_S){
+                        on_save_button_click();
+                    }
+                    break;
 
                 case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event->button.button == SDL_BUTTON_LEFT) {
