@@ -55,7 +55,7 @@ SDL_Texture* copy_texture(SDL_Renderer* renderer,SDL_Texture* src, float w, floa
 
 UndoNode *undo_stack = NULL;
 
-UndoNode *push(UndoNode *stack, UndoState *state) {
+UndoNode* push(UndoNode *stack, UndoState *state) {
     UndoNode *new_node = malloc(sizeof(UndoNode));
     if (!new_node) {
         return stack; // Return existing stack if allocation fails

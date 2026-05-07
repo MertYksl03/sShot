@@ -29,7 +29,7 @@ SDL_Texture* LoadSVG(SDL_Renderer* renderer, const char* file, int width, int he
     return tex;
 }
 
-Button *create_button(SDL_Renderer* renderer, ButtonType type, const char* svg_path, int x, int y, int size) {
+Button* create_button(SDL_Renderer* renderer, ButtonType type, const char* svg_path, int x, int y, int size) {
     Button *btn = malloc(sizeof(Button));
     if (!btn) {
         return NULL;

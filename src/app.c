@@ -7,8 +7,6 @@
 #include "wayland/take_ss_w.h"
 #include "X11/take_ss_x.h"
 
-#define DEV_MODE 1 // Set to 1 to enable dev mode features (e.g., using local asset/config paths)
-
 #define ASSET_PATH "/usr/share/sshot/"
 
 #define TITLE "sShot" // Window title(may be changed later)
@@ -34,7 +32,7 @@ Button *fullscreen_button;
 int fscreen_button_spacing = 20; // Spacing between buttons
 
 SDL_Surface* original_surface = NULL; 
-SDL_Texture *display_texture = NULL;
+SDL_Texture* display_texture = NULL;
 SDL_FRect image_rect = {0, 0, 0, 0}; // To store the position and size of the loaded image
 float display_texture_width, display_texture_height; 
 float zoom_sens = 0.05; // Sensitivity for zooming in/out the image
@@ -120,8 +118,8 @@ int APP_INIT(void){
         return APP_ERROR_INIT;
     }
 
-    image_rect.w = (float)original_surface->w; // Set initial width of the image
-    image_rect.h = (float)original_surface->h; // Set initial height of the image
+    image_rect.w = (float)original_surface->w;
+    image_rect.h = (float)original_surface->h;
 
     SDL_GetTextureSize(display_texture, &display_texture_width, &display_texture_height);
     

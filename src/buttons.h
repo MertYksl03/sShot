@@ -23,7 +23,7 @@ typedef struct {
 
 
 // Function prototypes
-Button *create_button(SDL_Renderer* renderer, ButtonType type, const char* svg_path, int x, int y, int size);
+Button* create_button(SDL_Renderer* renderer, ButtonType type, const char* svg_path, int x, int y, int size);
 SDL_Texture* LoadSVG(SDL_Renderer* renderer, const char* file, int width, int height);
 void render_button(SDL_Renderer* renderer, Button* button, SDL_Color color);
 bool is_button_hovered(Button* button, int mouse_x, int mouse_y);
